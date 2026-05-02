@@ -79,6 +79,19 @@ def on_message(msg):
     if not text.strip():
         return
 
+    # Control bot chatter depth:
+    # - 찬희 speaks → depth 0 (both bots can reply)
+    # - Bot replies to 찬희 → depth 1 (other bot can give feedback ONCE)  
+    # - Bot replies to another bot's depth-1 → depth 2 (STOP — no further replies)
+    # This prevents infinite loops while allowing work feedback.
+    if sender == "찬희":
+        last_seen["_depth"] = 0  # human reset
+    elif sender in ("대가리", "미코"):
+        current_depth = last_seen.get("_depth", 99)
+        if current_depth >= 4:
+            return  # chain too deep, stop
+        last_seen["_depth"] = current_depth + 1
+
     # Skip duplicate messages (Socket.IO sometimes sends twice)
     msg_key = f"{sender}:{text[:50]}"
     now = time.time()

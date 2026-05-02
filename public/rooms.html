@@ -1,168 +1,122 @@
 <!DOCTYPE html>
-<html lang="ko" data-theme="dark">
+<html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>ChaTalk - 채팅방</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
-    :root {
-      --bg: #1a1a2e;
-      --bg2: #16213e;
-      --card: #0f3460;
-      --text: #e8e8e8;
-      --sub: #a0a0b0;
-      --accent: #FEE500;
-      --danger: #ff4757;
-      --green: #2ed573;
-      --radius: 16px;
-    }
-    [data-theme="light"] {
-      --bg: #f0f0f5;
-      --bg2: #ffffff;
-      --card: #ffffff;
-      --text: #1a1a2e;
-      --sub: #777;
-    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+      background: #f2f2f7;
+      color: #000;
       height: 100dvh;
       display: flex;
       flex-direction: column;
-      max-width: 500px;
+      max-width: 440px;
       margin: 0 auto;
     }
     .header {
-      padding: 16px;
+      padding: 16px 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: var(--bg);
+      background: rgba(242,242,247,0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
       position: sticky;
       top: 0;
       z-index: 10;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
     }
     .header h2 {
-      font-size: 18px;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
     }
-    .header-actions {
-      display: flex;
-      gap: 8px;
-    }
-    .header-actions button {
-      width: 36px;
-      height: 36px;
+    .add-btn {
+      width: 32px; height: 32px;
       border-radius: 50%;
       border: none;
-      font-size: 16px;
+      background: #007AFF;
+      color: #fff;
+      font-size: 20px;
       cursor: pointer;
-      background: var(--card);
-      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .tabs {
       display: flex;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding: 0 16px 8px;
+      gap: 4px;
     }
     .tab {
-      flex: 1;
-      padding: 12px;
-      text-align: center;
-      cursor: pointer;
+      padding: 8px 20px;
+      border-radius: 20px;
       font-size: 14px;
       font-weight: 600;
-      color: var(--sub);
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s;
+      cursor: pointer;
+      color: #007AFF;
+      background: rgba(0,122,255,0.1);
+      border: none;
     }
     .tab.active {
-      color: var(--accent);
-      border-bottom-color: var(--accent);
+      background: #007AFF;
+      color: #fff;
     }
     .list {
       flex: 1;
       overflow-y: auto;
-      padding: 8px;
+      padding: 0 16px;
     }
     .list-item {
       display: flex;
       align-items: center;
-      padding: 12px;
-      border-radius: var(--radius);
+      padding: 12px 8px;
       cursor: pointer;
-      transition: background 0.15s;
       gap: 12px;
-      position: relative;
+      border-radius: 12px;
+      margin-bottom: 2px;
     }
-    .list-item:hover {
-      background: rgba(255,255,255,0.04);
-    }
-    .list-item:active {
-      background: rgba(255,255,255,0.08);
-    }
+    .list-item:active { background: rgba(0,0,0,0.04); }
     .avatar {
-      width: 44px;
-      height: 44px;
-      border-radius: 18px;
+      width: 48px; height: 48px;
+      border-radius: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
+      font-size: 24px;
       flex-shrink: 0;
+      background: #e5e5ea;
     }
-    .friend-avatar {
-      background: linear-gradient(135deg, #667eea, #764ba2);
-    }
-    .item-info {
-      flex: 1;
-      min-width: 0;
-    }
-    .item-name {
-      font-weight: 600;
-      font-size: 15px;
-    }
-    .item-desc {
-      font-size: 12px;
-      color: var(--sub);
-      margin-top: 2px;
-    }
+    .item-info { flex: 1; min-width: 0; }
+    .item-name { font-weight: 600; font-size: 17px; }
+    .item-desc { font-size: 14px; color: #8e8e93; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .badge {
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 10px;
-      background: rgba(255,255,255,0.1);
-      color: var(--sub);
+      font-size: 12px; color: #8e8e93; font-weight: 400;
     }
-    .online-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--green);
-      flex-shrink: 0;
-    }
-    .offline-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #555;
-      flex-shrink: 0;
+    .room-menu-btn {
+      width: 28px; height: 28px;
+      border-radius: 14px;
+      border: none;
+      background: transparent;
+      color: #c7c7cc;
+      cursor: pointer;
+      font-size: 16px;
     }
     .empty {
       text-align: center;
-      padding: 60px 20px;
-      color: var(--sub);
+      padding: 80px 20px;
+      color: #8e8e93;
     }
-    .empty .icon {
-      font-size: 48px;
-      margin-bottom: 12px;
-    }
+    .empty .icon { font-size: 48px; margin-bottom: 12px; color: #c7c7cc; }
+
+    /* Modal */
     .modal-overlay {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.6);
+      background: rgba(0,0,0,0.3);
       z-index: 100;
       display: none;
       align-items: center;
@@ -171,128 +125,86 @@
     }
     .modal-overlay.show { display: flex; }
     .modal {
-      background: var(--card);
-      border-radius: var(--radius);
+      background: #ffffff;
+      border-radius: 20px;
       padding: 24px;
       width: 100%;
       max-width: 340px;
-      box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.12);
     }
-    .modal h3 {
-      font-size: 16px;
-      margin-bottom: 12px;
-    }
-    .friend-select {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-bottom: 12px;
-    }
+    .modal h3 { font-size: 17px; font-weight: 600; margin-bottom: 12px; color: #000; }
+    .friend-select { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
     .friend-chip {
-      padding: 8px 14px;
+      padding: 8px 16px;
       border-radius: 20px;
-      background: var(--bg);
-      font-size: 13px;
+      background: #f2f2f7;
+      font-size: 14px;
       cursor: pointer;
       border: 2px solid transparent;
-      transition: all 0.15s;
-      user-select: none;
+      font-weight: 500;
     }
     .friend-chip.selected {
-      border-color: var(--accent);
-      background: rgba(254,229,0,0.1);
+      border-color: #007AFF;
+      background: rgba(0,122,255,0.1);
+      color: #007AFF;
     }
     .modal input {
       width: 100%;
-      padding: 12px;
-      border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.1);
-      background: var(--bg);
-      color: var(--text);
-      font-size: 14px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: none;
+      background: #f2f2f7;
+      color: #000;
+      font-size: 15px;
       margin-bottom: 12px;
       outline: none;
     }
-    .modal-buttons {
-      display: flex;
-      gap: 8px;
-    }
+    .modal-buttons { display: flex; gap: 8px; }
     .modal-buttons button {
       flex: 1;
       padding: 12px;
-      border-radius: 10px;
+      border-radius: 12px;
       border: none;
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 600;
       cursor: pointer;
     }
-    .btn-primary {
-      background: var(--accent);
-      color: #333;
-    }
-    .btn-cancel {
-      background: rgba(255,255,255,0.1);
-      color: var(--text);
-    }
-    .btn-danger {
-      background: var(--danger);
-      color: #fff;
-    }
+    .btn-primary { background: #007AFF; color: #fff; }
+    .btn-cancel { background: #f2f2f7; color: #007AFF; }
+    .btn-danger { background: #ff3b30; color: #fff; }
     .toast {
       position: fixed;
-      bottom: 24px;
+      bottom: 32px;
       left: 50%;
       transform: translateX(-50%);
-      background: #333;
+      background: rgba(0,0,0,0.8);
       color: #fff;
       padding: 10px 24px;
-      border-radius: 24px;
-      font-size: 13px;
+      border-radius: 20px;
+      font-size: 14px;
       z-index: 200;
       opacity: 0;
       transition: opacity 0.3s;
       pointer-events: none;
     }
-    .toast.show {
-      opacity: 1;
-    }
-    .room-menu-btn {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      border: none;
-      background: transparent;
-      color: var(--sub);
-      cursor: pointer;
-      font-size: 14px;
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .room-menu-btn:hover {
-      background: rgba(255,255,255,0.1);
-    }
+    .toast.show { opacity: 1; }
   </style>
 </head>
 <body>
   <div class="header">
-    <h2 id="headerTitle">채팅방</h2>
-    <div class="header-actions">
-      <button onclick="toggleTheme()" id="themeBtn">🌙</button>
-      <button onclick="showCreateMenu()">➕</button>
-    </div>
+    <h2 id="headerTitle">채팅</h2>
+    <button class="add-btn" onclick="showCreateMenu()">✏️</button>
   </div>
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('rooms')">채팅방</div>
-    <div class="tab" onclick="switchTab('friends')">친구</div>
+    <button class="tab active" onclick="switchTab('rooms')">채팅방</button>
+    <button class="tab" onclick="switchTab('friends')">친구</button>
   </div>
   <div class="list" id="list"></div>
 
-  <!-- 방 생성/친구 선택 모달 -->
+  <!-- Modal -->
   <div class="modal-overlay" id="createModal">
     <div class="modal">
-      <h3 id="modalTitle">새 채팅방</h3>
+      <h3 id="modalTitle">새 채팅</h3>
       <div id="modalContent"></div>
       <div class="modal-buttons">
         <button class="btn-cancel" onclick="closeModal()">취소</button>
@@ -301,39 +213,23 @@
     </div>
   </div>
 
-  <!-- 방 나가기 확인 모달 -->
   <div class="modal-overlay" id="leaveModal">
     <div class="modal">
       <h3>채팅방 나가기</h3>
-      <p style="color:var(--sub);font-size:14px;margin-bottom:12px;" id="leaveMsg"></p>
+      <p style="color:#8e8e93;font-size:15px;margin-bottom:16px;" id="leaveMsg"></p>
       <div class="modal-buttons">
         <button class="btn-cancel" onclick="closeLeaveModal()">취소</button>
         <button class="btn-danger" id="leaveConfirmBtn">나가기</button>
       </div>
     </div>
   </div>
-
   <div class="toast" id="toast"></div>
 
   <script>
     const NICK = localStorage.getItem('chatalk-nick') || '손님';
     const SOCKET_URL = window.location.origin;
-
-    const theme = localStorage.getItem('chatalk-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', theme);
-    document.getElementById('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
-
-    function toggleTheme() {
-      const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('chatalk-theme', next);
-      document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
-    }
-
     let currentTab = 'rooms';
-    let rooms = [];
-    let friends = [];
-    let socket;
+    let rooms = [], friends = [], socket;
 
     function toast(msg) {
       const el = document.getElementById('toast');
@@ -344,10 +240,8 @@
 
     function switchTab(tab) {
       currentTab = tab;
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      if (tab === 'rooms') document.querySelectorAll('.tab')[0].classList.add('active');
-      else document.querySelectorAll('.tab')[1].classList.add('active');
-      document.getElementById('headerTitle').textContent = tab === 'rooms' ? '채팅방' : '친구';
+      document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', (i===0 && tab==='rooms')||(i===1 && tab==='friends')));
+      document.getElementById('headerTitle').textContent = tab === 'rooms' ? '채팅' : '친구';
       renderList();
     }
 
@@ -355,310 +249,136 @@
       const list = document.getElementById('list');
       if (currentTab === 'rooms') {
         if (rooms.length === 0) {
-          list.innerHTML = `<div class="empty"><div class="icon">💬</div><p>아직 채팅방이 없어요</p><p style="font-size:12px;margin-top:4px;">➕ 버튼을 눌러 시작하세요</p></div>`;
-        } else {
-          list.innerHTML = rooms.map(r => {
-            const isDM = r.type === 'dm';
-            const others = Array.isArray(r.participants) ? r.participants.filter(p => p !== NICK) : [];
-            const displayName = r.name || (isDM ? others[0] || '?' : others.join(', '));
-            const icon = isDM ? '👤' : '👥';
-            const badge = isDM ? '' : `<span class="badge">${others.length + 1}명</span>`;
-            const lastMsg = r.last_message ? r.last_message.substring(0, 25) + (r.last_message.length > 25 ? '...' : '') : '';
-            return `
-              <div class="list-item" onclick="enterRoom('${r.id}')">
-                <div class="avatar" style="background:linear-gradient(135deg, #667eea, #764ba2)">${icon}</div>
-                <div class="item-info">
-                  <div class="item-name">${escapeHtml(displayName)} ${badge}</div>
-                  <div class="item-desc">${escapeHtml(lastMsg)}</div>
-                </div>
-                <button class="room-menu-btn" onclick="event.stopPropagation(); showLeaveModal('${r.id}','${escapeHtml(displayName)}')">⋮</button>
-              </div>`;
-          }).join('');
+          list.innerHTML = '<div class="empty"><div class="icon">💬</div><p>아직 채팅방이 없어요</p><p style="font-size:13px;margin-top:4px;">✏️ 버튼을 눌러 시작하세요</p></div>';
+          return;
         }
+        list.innerHTML = rooms.map(r => {
+          const isDM = r.type === 'dm';
+          const others = (r.participants||[]).filter(p => p !== NICK);
+          const displayName = r.name || (isDM ? (others[0]||'?') : others.join(', '));
+          const lastMsg = r.last_message ? r.last_message.substring(0,30) + (r.last_message.length>30?'...':'') : '';
+          return `<div class="list-item" onclick="enterRoom('${r.id}')">
+            <div class="avatar" style="background:#${isDM?'34c759':'007AFF'}22;color:#${isDM?'34c759':'007AFF'};">${isDM?'👤':'👥'}</div>
+            <div class="item-info">
+              <div class="item-name">${escapeHtml(displayName)} ${!isDM?`<span class="badge">${r.participants?.length||0}명</span>`:''}</div>
+              <div class="item-desc">${escapeHtml(lastMsg)}</div>
+            </div>
+            <button class="room-menu-btn" onclick="event.stopPropagation();showLeaveModal('${r.id}','${escapeHtml(displayName)}')">⋯</button>
+          </div>`;
+        }).join('');
       } else {
-        // 친구 탭
         if (friends.length === 0) {
-          list.innerHTML = `<div class="empty"><div class="icon">👥</div><p>아직 친구가 없어요</p><p style="font-size:12px;margin-top:4px;">채팅방을 만들면 자동으로 친구가 돼요</p></div>`;
-        } else {
-          Promise.all(
-            friends.map(f => fetch(SOCKET_URL + '/api/friends/' + encodeURIComponent(f)).then(r => r.json()).catch(() => ({})))
-          ).then(friendDetails => {
-            list.innerHTML = friends.map((f, i) => {
-              const d = friendDetails[i];
-              const emoji = (d && d.avatar) ? d.avatar : '😶';
-              const displayName = (d && d.display_name) ? d.display_name : f;
-              const status = (d && d.status === 'online') ? '<div class="online-dot"></div>' : '<div class="offline-dot"></div>';
-              return `
-                <div class="list-item" onclick="createOrOpenDM('${f}')">
-                  <div class="avatar friend-avatar">${emoji}</div>
-                  <div class="item-info">
-                    <div class="item-name">${escapeHtml(displayName)}</div>
-                    <div class="item-desc">${status} 클릭해서 1:1 채팅</div>
-                  </div>
-                </div>`;
-            }).join('');
-          }).catch(() => {
-            list.innerHTML = friends.map(f => `
-              <div class="list-item" onclick="createOrOpenDM('${f}')">
-                <div class="avatar friend-avatar">😶</div>
-                <div class="item-info">
-                  <div class="item-name">${escapeHtml(f)}</div>
-                  <div class="item-desc">클릭해서 1:1 채팅</div>
-                </div>
-              </div>`).join('');
-          });
+          list.innerHTML = '<div class="empty"><div class="icon">👥</div><p>아직 친구가 없어요</p><p style="font-size:13px;margin-top:4px;">채팅방을 만들면 자동으로 추가돼요</p></div>';
+          return;
         }
+        list.innerHTML = friends.map(f => `<div class="list-item" onclick="createOrOpenDM('${f}')">
+          <div class="avatar" style="background:#e5e5ea;">😶</div>
+          <div class="item-info">
+            <div class="item-name">${escapeHtml(f)}</div>
+            <div class="item-desc">클릭해서 1:1 채팅</div>
+          </div>
+        </div>`).join('');
       }
     }
 
-    function escapeHtml(text) {
-      if (!text) return '';
-      return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
+    function escapeHtml(t) { return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function enterRoom(id) { window.location.href = '/chat.html?room='+encodeURIComponent(id)+'&nick='+encodeURIComponent(NICK); }
 
-    function enterRoom(roomId) {
-      window.location.href = '/chat.html?room=' + encodeURIComponent(roomId) + '&nick=' + encodeURIComponent(NICK);
-    }
-
-    // 방 생성 모달
-    let modalMode = '';
-    let selectedFriends = [];
-
+    let modalMode = '', selectedFriends = [];
     function showCreateMenu() {
-      modalMode = 'menu';
-      selectedFriends = [];
+      modalMode = 'menu'; selectedFriends = [];
       document.getElementById('createModal').classList.add('show');
-      document.getElementById('modalTitle').textContent = '새 채팅방';
+      document.getElementById('modalTitle').textContent = '새 채팅';
       document.getElementById('modalContent').innerHTML = `
-        <button class="btn-primary" style="width:100%;margin-bottom:8px;padding:12px;border:none;border-radius:10px;background:var(--accent);color:#333;font-weight:600;cursor:pointer;" onclick="showDMSelector()">1:1 채팅 (DM)</button>
-        <button class="btn-cancel" style="width:100%;padding:12px;border:none;border-radius:10px;background:rgba(255,255,255,0.1);color:var(--text);cursor:pointer;" onclick="showGroupSelector()">단체 채팅 (그룹)</button>
-      `;
+        <button class="btn-primary" style="width:100%;margin-bottom:8px;padding:12px;border:none;border-radius:12px;background:#007AFF;color:#fff;font-weight:600;cursor:pointer;" onclick="showDMSelector()">1:1 채팅</button>
+        <button class="btn-cancel" style="width:100%;padding:12px;border:none;border-radius:12px;background:#f2f2f7;color:#007AFF;cursor:pointer;" onclick="showGroupSelector()">단체 채팅</button>`;
       document.getElementById('modalActionBtn').style.display = 'none';
     }
 
     function showDMSelector() {
-      modalMode = 'dm';
-      selectedFriends = [];
+      modalMode = 'dm'; selectedFriends = [];
       document.getElementById('modalTitle').textContent = '1:1 채팅';
       const others = friends.filter(f => f !== NICK);
-      if (others.length === 0) {
-        document.getElementById('modalContent').innerHTML = `<p style="color:var(--sub)">1:1 채팅할 친구가 없어요</p>`;
-        document.getElementById('modalActionBtn').style.display = 'none';
-        return;
-      }
-      document.getElementById('modalContent').innerHTML = `
-        <div class="friend-select">${others.map(f => `<div class="friend-chip" onclick="selectFriend('${f}', this, true)">${escapeHtml(f)}</div>`).join('')}</div>
-      `;
+      if (!others.length) { document.getElementById('modalContent').innerHTML = '<p style="color:#8e8e93">친구가 없어요</p>'; document.getElementById('modalActionBtn').style.display='none'; return; }
+      document.getElementById('modalContent').innerHTML = '<div class="friend-select">'+others.map(f => `<div class="friend-chip" onclick="selectFriend('${f}',this,true)">${escapeHtml(f)}</div>`).join('')+'</div>';
       document.getElementById('modalActionBtn').style.display = '';
       document.getElementById('modalActionBtn').textContent = '만들기';
       document.getElementById('modalActionBtn').onclick = createDM;
     }
 
     function showGroupSelector() {
-      modalMode = 'group';
-      selectedFriends = [];
+      modalMode = 'group'; selectedFriends = [];
       document.getElementById('modalTitle').textContent = '단체 채팅';
       const others = friends.filter(f => f !== NICK);
-      if (others.length === 0) {
-        document.getElementById('modalContent').innerHTML = `<p style="color:var(--sub)">초대할 친구가 없어요</p>`;
-        document.getElementById('modalActionBtn').style.display = 'none';
-        return;
-      }
-      document.getElementById('modalContent').innerHTML = `
-        <p style="font-size:12px;color:var(--sub);margin-bottom:8px;">초대할 친구 선택 (여러 명 가능)</p>
-        <div class="friend-select">${others.map(f => `<div class="friend-chip" onclick="selectFriend('${f}', this)">${escapeHtml(f)}</div>`).join('')}</div>
-        <input type="text" id="groupNameInput" placeholder="그룹 이름 (선택사항)" maxlength="20">
-      `;
+      if (!others.length) { document.getElementById('modalContent').innerHTML = '<p style="color:#8e8e93">친구가 없어요</p>'; document.getElementById('modalActionBtn').style.display='none'; return; }
+      document.getElementById('modalContent').innerHTML = '<p style="font-size:13px;color:#8e8e93;margin-bottom:8px;">초대할 친구 선택</p><div class="friend-select">'+others.map(f => `<div class="friend-chip" onclick="selectFriend('${f}',this)">${escapeHtml(f)}</div>`).join('')+'</div><input type="text" id="groupNameInput" placeholder="그룹 이름 (선택사항)" maxlength="20">';
       document.getElementById('modalActionBtn').style.display = '';
       document.getElementById('modalActionBtn').textContent = '만들기';
       document.getElementById('modalActionBtn').onclick = createGroup;
     }
 
     function selectFriend(name, el, exclusive) {
-      if (exclusive) {
-        // DM은 한 명만
-        selectedFriends = [name];
-        document.querySelectorAll('.friend-chip').forEach(c => c.classList.remove('selected'));
-        el.classList.add('selected');
-      } else {
-        const idx = selectedFriends.indexOf(name);
-        if (idx >= 0) {
-          selectedFriends.splice(idx, 1);
-          el.classList.remove('selected');
-        } else {
-          selectedFriends.push(name);
-          el.classList.add('selected');
-        }
-      }
+      if (exclusive) { selectedFriends = [name]; document.querySelectorAll('.friend-chip').forEach(c=>c.classList.remove('selected')); el.classList.add('selected'); return; }
+      const idx = selectedFriends.indexOf(name);
+      if (idx>=0) { selectedFriends.splice(idx,1); el.classList.remove('selected'); }
+      else { selectedFriends.push(name); el.classList.add('selected'); }
     }
 
     async function createDM() {
-      if (selectedFriends.length === 0) {
-        toast('친구를 선택해주세요');
-        return;
-      }
-      const target = selectedFriends[0];
-      try {
-        const res = await fetch(SOCKET_URL + '/api/rooms/dm', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user1: NICK, user2: target })
-        });
-        const data = await res.json();
-        if (data.room_id || data.id) {
-          closeModal();
-          enterRoom(data.room_id || data.id);
-        } else if (data.error) {
-          toast(data.error);
-        } else {
-          toast('방 생성 실패');
-        }
-      } catch (e) {
-        toast('서버 오류');
-      }
+      if (!selectedFriends.length) { toast('친구를 선택해주세요'); return; }
+      const r = await fetch(SOCKET_URL+'/api/rooms/dm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user1:NICK,user2:selectedFriends[0]})});
+      const d = await r.json();
+      if (d.room_id||d.id) { closeModal(); enterRoom(d.room_id||d.id); } else { toast(d.error||'실패'); }
     }
 
     async function createGroup() {
-      if (selectedFriends.length === 0) {
-        toast('친구를 1명 이상 선택해주세요');
-        return;
-      }
-      const groupName = document.getElementById('groupNameInput')?.value?.trim() || '';
-      try {
-        const res = await fetch(SOCKET_URL + '/api/rooms/group', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ participants: [NICK, ...selectedFriends], name: groupName })
-        });
-        const data = await res.json();
-        if (data.room_id || data.id) {
-          closeModal();
-          enterRoom(data.room_id || data.id);
-        } else if (data.error) {
-          toast(data.error);
-        } else {
-          toast('그룹 생성 실패');
-        }
-      } catch (e) {
-        toast('서버 오류');
-      }
+      if (!selectedFriends.length) { toast('친구를 선택해주세요'); return; }
+      const name = document.getElementById('groupNameInput')?.value?.trim()||'';
+      const r = await fetch(SOCKET_URL+'/api/rooms/group',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({participants:[NICK,...selectedFriends],name})});
+      const d = await r.json();
+      if (d.room_id||d.id) { closeModal(); enterRoom(d.room_id||d.id); } else { toast(d.error||'실패'); }
     }
 
-    function closeModal() {
-      document.getElementById('createModal').classList.remove('show');
-    }
+    function closeModal() { document.getElementById('createModal').classList.remove('show'); }
 
-    // 방 나가기 모달
     let leaveRoomId = '';
-
-    function showLeaveModal(roomId, displayName) {
+    function showLeaveModal(roomId, name) {
       leaveRoomId = roomId;
-      document.getElementById('leaveMsg').textContent = `"${displayName}" 방을 나가시겠습니까?`;
+      document.getElementById('leaveMsg').textContent = '"'+name+'" 방을 나가시겠습니까?';
       document.getElementById('leaveModal').classList.add('show');
       document.getElementById('leaveConfirmBtn').onclick = leaveRoom;
     }
-
-    function closeLeaveModal() {
-      document.getElementById('leaveModal').classList.remove('show');
-      leaveRoomId = '';
-    }
-
+    function closeLeaveModal() { document.getElementById('leaveModal').classList.remove('show'); leaveRoomId=''; }
     async function leaveRoom() {
       if (!leaveRoomId) return;
-      try {
-        const res = await fetch(SOCKET_URL + '/api/rooms/' + encodeURIComponent(leaveRoomId) + '/leave', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nickname: NICK })
-        });
-        const data = await res.json();
-        if (data.ok || data.success) {
-          toast('채팅방을 나갔습니다');
-          closeLeaveModal();
-          loadRooms();
-        } else {
-          toast(data.error || '실패');
-        }
-      } catch (e) {
-        toast('서버 오류');
-      }
+      const r = await fetch(SOCKET_URL+'/api/rooms/'+encodeURIComponent(leaveRoomId)+'/leave',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:NICK})});
+      const d = await r.json();
+      if (d.ok) { toast('나갔습니다'); closeLeaveModal(); loadRooms(); } else { toast(d.error||'실패'); }
     }
 
-    // 친구 클릭: DM 있으면 바로 입장, 없으면 새로 생성
     async function createOrOpenDM(friend) {
-      try {
-        const join = fetch(SOCKET_URL + '/api/rooms/dm/join', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user1: NICK, user2: friend })
-        });
-        const res = await join;
-        const data = await res.json();
-        if (data.room_id || data.id) {
-          enterRoom(data.room_id || data.id);
-        } else if (data.error && data.error.includes('not found')) {
-          // DM 없음 → 새로 만들기
-          const createRes = await fetch(SOCKET_URL + '/api/rooms/dm', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user1: NICK, user2: friend })
-          });
-          const createData = await createRes.json();
-          if (createData.room_id || createData.id) {
-            enterRoom(createData.room_id || createData.id);
-          } else {
-            toast(createData.error || '생성 실패');
-          }
-        }
-      } catch (e) {
-        toast('서버 오류');
-      }
+      const r = await fetch(SOCKET_URL+'/api/rooms/dm/join',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user1:NICK,user2:friend})});
+      const d = await r.json();
+      if (d.room_id) { enterRoom(d.room_id); return; }
+      const r2 = await fetch(SOCKET_URL+'/api/rooms/dm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user1:NICK,user2:friend})});
+      const d2 = await r2.json();
+      if (d2.room_id||d2.id) enterRoom(d2.room_id||d2.id); else toast(d2.error||'실패');
     }
 
     async function loadRooms() {
-      try {
-        const res = await fetch(SOCKET_URL + '/api/rooms?nick=' + encodeURIComponent(NICK));
-        const data = await res.json();
-        rooms = data.rooms || data || [];
-        renderList();
-      } catch (e) {}
+      try { const r = await fetch(SOCKET_URL+'/api/rooms?nick='+encodeURIComponent(NICK)); const d = await r.json(); rooms = d.rooms||d||[]; renderList(); } catch(e){}
     }
-
     async function loadFriends() {
-      try {
-        const res = await fetch(SOCKET_URL + '/api/friends/all');
-        const data = await res.json();
-        friends = data.friends || data || [];
-        renderList();
-      } catch (e) {}
+      try { const r = await fetch(SOCKET_URL+'/api/friends/all'); const d = await r.json(); friends = d.friends||d||[]; renderList(); } catch(e){}
     }
 
-    // Socket.IO 연결
     function connect() {
-      socket = io(SOCKET_URL, {
-        query: { nick: NICK, avatar: '😶' },
-        transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionAttempts: Infinity
-      });
-
-      socket.on('connect', () => {
-        console.log('rooms: connected as', NICK);
-      });
-
-      socket.on('friend_update', function(data) {
-        loadFriends();
-      });
-
-      socket.on('room_update', function(data) {
-        loadRooms();
-      });
+      socket = io(SOCKET_URL,{transports:['websocket','polling'],reconnection:true,reconnectionDelay:1000,reconnectionAttempts:Infinity});
+      socket.on('connect',()=>{});
+      socket.on('friend_update',loadFriends);
+      socket.on('room_update',loadRooms);
     }
-
-    loadRooms();
-    loadFriends();
-    connect();
+    loadRooms(); loadFriends(); connect();
   </script>
 </body>
 </html>

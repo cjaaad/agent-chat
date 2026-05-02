@@ -1,151 +1,83 @@
 <!DOCTYPE html>
-<html lang="ko" data-theme="dark">
+<html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>ChaTalk</title>
   <style>
-    :root {
-      --bg: #1a1a2e;
-      --bg2: #16213e;
-      --card: #0f3460;
-      --text: #e8e8e8;
-      --sub: #a0a0b0;
-      --accent: #FEE500;
-      --danger: #ff4757;
-      --green: #2ed573;
-      --radius: 16px;
-    }
-    [data-theme="light"] {
-      --bg: #f0f0f5;
-      --bg2: #ffffff;
-      --card: #ffffff;
-      --text: #1a1a2e;
-      --sub: #777;
-    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+      background: #f2f2f7;
+      color: #000;
       height: 100dvh;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 20px;
     }
     .login-card {
-      background: var(--card);
-      border-radius: var(--radius);
-      padding: 40px 30px;
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 48px 36px;
       width: 100%;
-      max-width: 360px;
+      max-width: 380px;
       text-align: center;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 20px rgba(0,0,0,0.06);
     }
-    .logo {
-      font-size: 48px;
-      margin-bottom: 8px;
-    }
-    h1 {
-      font-size: 24px;
-      margin-bottom: 4px;
-    }
-    .subtitle {
-      color: var(--sub);
-      font-size: 13px;
-      margin-bottom: 28px;
-    }
+    .logo { font-size: 52px; margin-bottom: 12px; }
+    h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.3px; margin-bottom: 4px; color: #000; }
+    .subtitle { color: #8e8e93; font-size: 15px; margin-bottom: 32px; }
     input {
       width: 100%;
       padding: 14px 16px;
       border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.1);
-      background: var(--bg);
-      color: var(--text);
-      font-size: 16px;
+      border: none;
+      background: #f2f2f7;
+      color: #000;
+      font-size: 17px;
       margin-bottom: 16px;
       outline: none;
-      transition: border 0.2s;
+      caret-color: #007AFF;
     }
-    input:focus {
-      border-color: var(--accent);
-    }
+    input::placeholder { color: #c7c7cc; }
     button {
       width: 100%;
       padding: 14px;
-      border-radius: 12px;
+      border-radius: 14px;
       border: none;
-      background: var(--accent);
-      color: #333;
-      font-size: 16px;
-      font-weight: 700;
+      background: #007AFF;
+      color: #fff;
+      font-size: 17px;
+      font-weight: 600;
       cursor: pointer;
-      transition: transform 0.1s, opacity 0.2s;
+      transition: opacity 0.15s;
     }
-    button:active {
-      transform: scale(0.97);
-    }
-    button:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-    .status {
-      font-size: 12px;
-      color: var(--sub);
-      margin-top: 12px;
-      min-height: 18px;
-    }
-    .theme-toggle {
-      position: fixed;
-      top: 16px;
-      right: 16px;
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: var(--card);
-      border: none;
-      font-size: 20px;
-      cursor: pointer;
-    }
+    button:active { opacity: 0.7; }
+    .status { font-size: 13px; color: #ff3b30; margin-top: 12px; min-height: 20px; }
   </style>
 </head>
 <body>
-  <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
   <div class="login-card">
     <div class="logo">💬</div>
     <h1>ChaTalk</h1>
-    <p class="subtitle">실시간 채팅에 오신 걸 환영해요</p>
+    <p class="subtitle">채팅에 오신 걸 환영해요</p>
     <input type="text" id="nickname" placeholder="닉네임을 입력하세요" maxlength="12" autocomplete="off">
     <button onclick="enter()">입장하기</button>
     <p class="status" id="status"></p>
   </div>
   <script>
-    const theme = localStorage.getItem('chatalk-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', theme);
-    document.getElementById('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
-
-    function toggleTheme() {
-      const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('chatalk-theme', next);
-      document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
-    }
-
     function enter() {
       const nick = document.getElementById('nickname').value.trim();
-      if (!nick) {
-        document.getElementById('status').textContent = '닉네임을 입력해주세요';
-        return;
-      }
+      if (!nick) { document.getElementById('status').textContent = '닉네임을 입력해주세요'; return; }
       localStorage.setItem('chatalk-nick', nick);
       window.location.href = '/rooms.html';
     }
-
     document.getElementById('nickname').addEventListener('keydown', e => {
       if (e.key === 'Enter') enter();
     });
+    if (localStorage.getItem('chatalk-nick')) {
+      document.getElementById('nickname').value = localStorage.getItem('chatalk-nick');
+    }
   </script>
 </body>
 </html>
