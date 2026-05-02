@@ -46,7 +46,21 @@ def chatlog(*args):
 
 @sio.on('connect')
 def on_connect():
+    global current_room
     chatlog(f"CONNECTED as {NICK}")
+    # Re-detect room on reconnect (Render server restarts change room IDs)
+    try:
+        import urllib.request, json
+        resp = urllib.request.urlopen(f"{SERVER}/api/rooms?nick={urllib.parse.quote(NICK)}")
+        data = json.loads(resp.read())
+        groups = [r for r in data.get('rooms', []) if r.get('type') == 'group']
+        if groups:
+            current_room = groups[0]['id']
+    except:
+        pass
+    if current_room:
+        sio.emit('join_room', {'room_id': current_room, 'nickname': NICK, 'avatar': AVATAR})
+        chatlog(f"Joined: {current_room}")
 
 @sio.on('message')
 def on_message(msg):
@@ -116,6 +130,20 @@ if __name__ == "__main__":
     server_url = sys.argv[2] if len(sys.argv) > 2 else SERVER
 
     chatlog(f"Bridge starting for {NICK} ({AVATAR})")
+
+    # Auto-discover room if not specified
+    if not room:
+        try:
+            import urllib.request, json
+            resp = urllib.request.urlopen(f"{server_url}/api/rooms?nick={urllib.parse.quote(NICK)}")
+            data = json.loads(resp.read())
+            groups = [r for r in data.get('rooms', []) if r.get('type') == 'group']
+            if groups:
+                room = groups[0]['id']
+                chatlog(f"Auto-detected room: {room}")
+        except Exception as e:
+            chatlog(f"Could not auto-detect room: {e}")
+            sys.exit(1)
 
     query = f"nick={urllib.parse.quote(NICK)}&avatar={urllib.parse.quote(AVATAR)}"
     connect_url = f"{server_url}?{query}" if "?" not in server_url else f"{server_url}&{query}"
