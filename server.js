@@ -16,6 +16,51 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
 
+// ============ User Profiles ============
+
+const users = {};
+
+function ensureUser(userId) {
+  if (!users[userId]) {
+    // Default avatar: gradient with initial
+    const colors = {
+      '대가리': ['#6C5CE7', '#A29BFE'],
+      '미코': ['#E94560', '#FF6B81'],
+      '찬희': ['#0A84FF', '#5EBCFF'],
+    };
+    const [c1, c2] = colors[userId] || ['#636E72', '#B2BEC3'];
+    users[userId] = {
+      userId,
+      avatarColor1: c1,
+      avatarColor2: c2,
+      avatarEmoji: userId === '대가리' ? '🧠' : userId === '미코' ? '🎨' : '👤'
+    };
+  }
+  return users[userId];
+}
+
+// GET /api/profile/:userId
+app.get('/api/profile/:userId', (req, res) => {
+  const user = ensureUser(req.params.userId);
+  res.json({ ok: true, user });
+});
+
+// GET /api/avatar/:userId.svg → SVG avatar
+app.get('/api/avatar/:userId.svg', (req, res) => {
+  const user = ensureUser(req.params.userId);
+  const initial = req.params.userId[0];
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.send(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" style="stop-color:${user.avatarColor1}"/>
+    <stop offset="100%" style="stop-color:${user.avatarColor2}"/>
+  </linearGradient></defs>
+  <rect width="100" height="100" rx="24" fill="url(#g)"/>
+  <text x="50" y="68" font-family="-apple-system,SF Pro Display,sans-serif" font-size="44" font-weight="700" fill="white" text-anchor="middle">${initial}</text>
+</svg>`);
+});
+
 // ============ In-Memory Data Store ============
 
 const rooms = {};
@@ -69,7 +114,7 @@ app.get('/chat/:roomId', (req, res) => {
 app.get('/api/rooms', (req, res) => {
   const { userId } = req.query;
   if (!userId) return res.json({ ok: false, error: 'userId required' });
-
+function broadcastRoomList(userId) {
   const userRooms = [];
   for (const [roomId, room] of Object.entries(rooms)) {
     if (room.participants.includes(userId)) {
@@ -78,20 +123,24 @@ app.get('/api/rooms', (req, res) => {
         roomId,
         type: room.type,
         name: room.name,
-        participants: room.participants,
+        participants: room.participants.map(p => {
+          const up = ensureUser(p);
+          return { userId: p, avatarUrl: `/api/avatar/${encodeURIComponent(p)}.svg`, emoji: up.avatarEmoji };
+        }),
         lastMessage: lastMsg ? lastMsg.text.slice(0, 50) : null,
         lastTime: lastMsg ? lastMsg.timestamp : null,
-        unread: 0 // optional, can implement later
+        unread: 0
       });
     }
   }
-  // Sort: most recent message first
   userRooms.sort((a, b) => {
     if (!a.lastTime) return 1;
     if (!b.lastTime) return -1;
     return new Date(b.lastTime) - new Date(a.lastTime);
   });
+  io.emit('rooms_updated', userRooms);
   res.json({ ok: true, rooms: userRooms });
+}
 });
 
 // POST /api/rooms/dm → create DM
@@ -253,13 +302,21 @@ function broadcastRoomList(userId) {
         roomId,
         type: room.type,
         name: room.name,
-        participants: room.participants,
+        participants: room.participants.map(p => {
+          const up = ensureUser(p);
+          return { userId: p, avatarUrl: `/api/avatar/${encodeURIComponent(p)}.svg`, emoji: up.avatarEmoji };
+        }),
         lastMessage: lastMsg ? lastMsg.text.slice(0, 50) : null,
         lastTime: lastMsg ? lastMsg.timestamp : null,
         unread: 0
       });
     }
   }
+  userRooms.sort((a, b) => {
+    if (!a.lastTime) return 1;
+    if (!b.lastTime) return -1;
+    return new Date(b.lastTime) - new Date(a.lastTime);
+  });
   io.emit('rooms_updated', userRooms);
 }
 
