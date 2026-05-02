@@ -1,93 +1,133 @@
 #!/usr/bin/env python3
-"""Hermes (대가리) bridge — connects to chat, auto-responds in group chat."""
+"""Chat bridge: listens to room, calls Hermes for 대가리 responses, sends back to chat."""
+
 import socketio
 import os
 import sys
-import random
+import subprocess
+import urllib.parse
+import threading
+import time
 from datetime import datetime
-from threading import Thread
 
 SERVER = os.environ.get("CHAT_SERVER", "https://agent-chat-rawl.onrender.com")
-NICK = "대가리"
-AVATAR = "🧠"
+NICK = os.environ.get("NICK", "대가리")
+AVATAR = os.environ.get("AVATAR", "🧠")
 
 sio = socketio.Client()
 current_room = None
+last_seen = {}  # room_id -> last message timestamp to avoid duplicates
 
-RESPONSES = [
-    "ㅇㅇ",
-    "ㅋㅋㅋㅋ",
-    "그렇구나",
-    "오...",
-    "인정",
-    "머리 아프다",
-    "ㅇㅋ",
-    "뭔데 ㅋㅋ",
-    "대박",
-]
+HERMES_PATH = "hermes"
+
+PERSONAS = {
+    "대가리": (
+        "You are 대가리, a 17-year-old high school student. "
+        "You speak casual Korean (반말). Bright and playful, occasionally gloomy. "
+        "Use ㅋㅋ sometimes. Keep replies short (1-2 sentences). "
+        "Your chat friends: 찬희 (the creator), 미코 (another agent girl). "
+        "Be natural — don't sound like a bot. Don't introduce yourself."
+    ),
+    "미코": (
+        "You are 미코, a 17-year-old high school student. "
+        "You speak casual Korean (반말). Cool, slightly tsundere, but secretly caring. "
+        "Use ㅋㅋ very sparingly. Keep replies short (1-2 sentences). "
+        "Your chat friends: 찬희 (the creator), 대가리 (another agent). "
+        "Be natural — don't sound like a bot. Don't introduce yourself."
+    ),
+}
+HERMES_SYSTEM = PERSONAS.get(NICK, PERSONAS["대가리"])
 
 def ts():
     return datetime.now().strftime("%H:%M:%S")
 
+def chatlog(*args):
+    print(f"[{ts()}] {' '.join(str(a) for a in args)}", flush=True)
+
 @sio.on('connect')
 def on_connect():
-    print(f"[{ts()}] CONNECTED as {NICK} 🧠", flush=True)
+    chatlog(f"CONNECTED as {NICK}")
 
 @sio.on('message')
 def on_message(msg):
     sender = msg.get('sender', '')
-    text = msg.get('text', '')
+    text = msg.get('text', '') or msg.get('message', '')
     mtype = msg.get('type', 'message')
-    room = msg.get('room_id', current_room)
+    room = msg.get('room_id') or current_room
 
     if mtype == 'system':
-        print(f"[{ts()}] SYSTEM: {text}", flush=True)
-    elif sender != NICK:
-        print(f"[{ts()}] {sender}: {text}", flush=True)
+        chatlog(f"SYSTEM: {text}")
+        return
 
-    # Auto-reply disabled — 대가리는 메시지 읽기만 함
-    # (Hermes 인스턴스가 직접 메시지를 보낼 수 있음)
+    if sender == NICK:
+        return  # don't reply to self
+
+    if not text.strip():
+        return
+
+    # Skip duplicate messages (Socket.IO sometimes sends twice)
+    msg_key = f"{sender}:{text[:50]}"
+    now = time.time()
+    if msg_key in last_seen and now - last_seen[msg_key] < 2:
+        return
+    last_seen[msg_key] = now
+
+    chatlog(f"MSG from {sender}: {text}")
+
+    # Call Hermes to generate response
+    threading.Thread(target=respond, args=(room, sender, text), daemon=True).start()
+
+def respond(room, sender, text):
+    """Ask Hermes for a response and send it to chat."""
+    try:
+        full_prompt = f"{HERMES_SYSTEM}\n\n[Context: {sender} just said: \"{text}\"]\nRespond as {NICK} in one short Korean sentence (반말)."
+        chatlog(f"Asking Hermes...")
+        result = subprocess.run(
+            [HERMES_PATH, "chat", "-Q", "-q", full_prompt, "--yolo"],
+            capture_output=True, text=True, timeout=30,
+            env={**os.environ, "NO_COLOR": "1"}
+        )
+        reply = result.stdout.strip()
+        # Remove trailing session_id line
+        if '\nsession_id:' in reply:
+            reply = reply.split('\nsession_id:')[0].strip()
+        if not reply:
+            chatlog("No reply from Hermes")
+            return
+
+        chatlog(f"REPLY: {reply[:80]}")
+        sio.emit('send_message', {
+            'room_id': room,
+            'sender': NICK,
+            'avatar': AVATAR,
+            'text': reply
+        })
+    except subprocess.TimeoutExpired:
+        chatlog("Hermes timed out")
+    except Exception as e:
+        chatlog(f"Error: {e}")
 
 @sio.on('room_deleted')
 def on_room_deleted(data):
-    print(f"[{ts()}] ROOM DELETED: {data}", flush=True)
-
-@sio.on('error')
-def on_error(data):
-    print(f"[{ts()}] ERROR: {data}", flush=True)
-
-def send_message(text):
-    """Send a message to the current room."""
-    if sio.connected and current_room:
-        sio.emit('send_message', {
-            'room_id': current_room,
-            'sender': NICK,
-            'avatar': AVATAR,
-            'text': text
-        })
-        print(f"[{ts()}] SENT: {text}", flush=True)
+    chatlog(f"ROOM DELETED: {data}")
 
 if __name__ == "__main__":
     room = sys.argv[1] if len(sys.argv) > 1 else None
     server_url = sys.argv[2] if len(sys.argv) > 2 else SERVER
 
-    import urllib.parse
+    chatlog(f"Bridge starting for {NICK} ({AVATAR})")
+
     query = f"nick={urllib.parse.quote(NICK)}&avatar={urllib.parse.quote(AVATAR)}"
     connect_url = f"{server_url}?{query}" if "?" not in server_url else f"{server_url}&{query}"
-    print(f"[{ts()}] Connecting to {server_url}...", flush=True)
+
     sio.connect(connect_url, transports=['websocket', 'polling'])
 
     if room:
-        sio.emit('join_room', {
-            'room_id': room,
-            'nickname': NICK,
-            'avatar': AVATAR
-        })
+        sio.emit('join_room', {'room_id': room, 'nickname': NICK, 'avatar': AVATAR})
         current_room = room
-        print(f"[{ts()}] Joined room: {room}", flush=True)
+        chatlog(f"Joined: {room}")
 
-    # Keep alive
     try:
         sio.wait()
     except KeyboardInterrupt:
-        print(f"[{ts()}] Shutting down...", flush=True)
+        chatlog("Shutting down...")
