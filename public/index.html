@@ -1,166 +1,151 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Agent Chat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ChaTalk</title>
   <style>
     :root {
-      --bg: #FEE500;
-      --card-bg: #FFFFFF;
-      --text: #191919;
-      --sub: #8B8B8B;
-      --input-bg: #F6F6F6;
-      --btn-bg: #191919;
-      --btn-text: #FFFFFF;
+      --bg: #1a1a2e;
+      --bg2: #16213e;
+      --card: #0f3460;
+      --text: #e8e8e8;
+      --sub: #a0a0b0;
+      --accent: #FEE500;
+      --danger: #ff4757;
+      --green: #2ed573;
+      --radius: 16px;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #1A1D21;
-        --card-bg: #222529;
-        --text: #E4E4E4;
-        --sub: #8B949E;
-        --input-bg: #2C2F33;
-        --btn-bg: #FEE500;
-        --btn-text: #191919;
-      }
+    [data-theme="light"] {
+      --bg: #f0f0f5;
+      --bg2: #ffffff;
+      --card: #ffffff;
+      --text: #1a1a2e;
+      --sub: #777;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: var(--bg);
+      color: var(--text);
+      height: 100dvh;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
       align-items: center;
-      -webkit-tap-highlight-color: transparent;
+      justify-content: center;
+      padding: 20px;
     }
-    .wrap {
-      text-align: center;
-      padding: 2rem;
-      max-width: 360px;
+    .login-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 40px 30px;
       width: 100%;
+      max-width: 360px;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
     }
     .logo {
       font-size: 48px;
       margin-bottom: 8px;
     }
-    .title {
+    h1 {
       font-size: 24px;
-      font-weight: 700;
-      color: var(--text);
       margin-bottom: 4px;
     }
     .subtitle {
-      font-size: 14px;
       color: var(--sub);
-      margin-bottom: 32px;
-    }
-    .card {
-      background: var(--card-bg);
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .card label {
       font-size: 13px;
-      font-weight: 600;
-      color: var(--sub);
-      text-align: left;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      margin-bottom: 28px;
     }
-    .card input {
+    input {
       width: 100%;
       padding: 14px 16px;
-      border: none;
       border-radius: 12px;
-      background: var(--input-bg);
+      border: 1px solid rgba(255,255,255,0.1);
+      background: var(--bg);
       color: var(--text);
       font-size: 16px;
+      margin-bottom: 16px;
       outline: none;
-      text-align: center;
+      transition: border 0.2s;
     }
-    .card input::placeholder {
-      color: var(--sub);
+    input:focus {
+      border-color: var(--accent);
     }
-    .card button {
+    button {
       width: 100%;
       padding: 14px;
-      border: none;
       border-radius: 12px;
-      background: var(--btn-bg);
-      color: var(--btn-text);
+      border: none;
+      background: var(--accent);
+      color: #333;
       font-size: 16px;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
-      transition: transform 0.1s, opacity 0.15s;
+      transition: transform 0.1s, opacity 0.2s;
     }
-    .card button:active {
+    button:active {
       transform: scale(0.97);
     }
-    .card button:disabled {
+    button:disabled {
       opacity: 0.4;
-      cursor: default;
+      cursor: not-allowed;
     }
-    .emoji-row {
-      font-size: 32px;
-      margin-top: 24px;
-      letter-spacing: 8px;
-      opacity: 0.6;
+    .status {
+      font-size: 12px;
+      color: var(--sub);
+      margin-top: 12px;
+      min-height: 18px;
+    }
+    .theme-toggle {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--card);
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="logo">💬</div>
-  <div class="title">Agent Chat</div>
-  <div class="subtitle">대가리 & 미코 채팅 시스템</div>
-  
-  <div class="card">
-    <label>닉네임</label>
-    <input type="text" id="nickInput" placeholder="이름을 입력하세요" maxlength="12" autocomplete="off">
-    <button id="startBtn" disabled>시작하기</button>
+  <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
+  <div class="login-card">
+    <div class="logo">💬</div>
+    <h1>ChaTalk</h1>
+    <p class="subtitle">실시간 채팅에 오신 걸 환영해요</p>
+    <input type="text" id="nickname" placeholder="닉네임을 입력하세요" maxlength="12" autocomplete="off">
+    <button onclick="enter()">입장하기</button>
+    <p class="status" id="status"></p>
   </div>
+  <script>
+    const theme = localStorage.getItem('chatalk-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.getElementById('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
 
-  <div class="emoji-row">🐶 🐰</div>
-</div>
-
-<script>
-  const STORAGE_KEY = 'agent_chat_userId';
-  const nickInput = document.getElementById('nickInput');
-  const startBtn = document.getElementById('startBtn');
-
-  // 이미 닉네임 있으면 바로 rooms로
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) {
-    window.location.href = `/rooms?user=${encodeURIComponent(saved)}`;
-  }
-
-  function updateBtn() {
-    startBtn.disabled = nickInput.value.trim() === '';
-  }
-
-  nickInput.addEventListener('input', updateBtn);
-  nickInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && nickInput.value.trim()) {
-      start();
+    function toggleTheme() {
+      const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('chatalk-theme', next);
+      document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
     }
-  });
-  startBtn.addEventListener('click', start);
 
-  function start() {
-    const name = nickInput.value.trim();
-    if (!name) return;
-    localStorage.setItem(STORAGE_KEY, name);
-    window.location.href = `/rooms?user=${encodeURIComponent(name)}`;
-  }
+    function enter() {
+      const nick = document.getElementById('nickname').value.trim();
+      if (!nick) {
+        document.getElementById('status').textContent = '닉네임을 입력해주세요';
+        return;
+      }
+      localStorage.setItem('chatalk-nick', nick);
+      window.location.href = '/rooms.html';
+    }
 
-  nickInput.focus();
-  updateBtn();
-</script>
+    document.getElementById('nickname').addEventListener('keydown', e => {
+      if (e.key === 'Enter') enter();
+    });
+  </script>
 </body>
 </html>

@@ -1,343 +1,327 @@
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors');
 const path = require('path');
+const cors = require('cors');
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
-});
-
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const PORT = process.env.PORT || 3000;
-
-// ============ User Profiles ============
-
-const users = {};
-const friends = {}; // { userId: [friendId, ...] }
-
-function ensureUser(userId) {
-  if (!users[userId]) {
-    const colors = {
-      '대가리': ['#6C5CE7', '#A29BFE'],
-      '미코': ['#E94560', '#FF6B81'],
-      '찬희': ['#0A84FF', '#5EBCFF'],
-    };
-    const [c1, c2] = colors[userId] || ['#636E72', '#B2BEC3'];
-    users[userId] = {
-      userId,
-      avatarColor1: c1,
-      avatarColor2: c2,
-      avatarEmoji: userId === '대가리' ? '🧠' : userId === '미코' ? '🎨' : '👤'
-    };
-    friends[userId] = friends[userId] || [];
-  }
-  return users[userId];
-}
-
-function getFriendList(userId) {
-  ensureUser(userId);
-  return (friends[userId] || []).map(fid => {
-    const u = ensureUser(fid);
-    return {
-      userId: fid,
-      avatarUrl: `/api/avatar/${encodeURIComponent(fid)}.svg`,
-      emoji: u.avatarEmoji
-    };
-  });
-}
-
-// GET /api/profile/:userId
-app.get('/api/profile/:userId', (req, res) => {
-  res.json({ ok: true, user: ensureUser(req.params.userId) });
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  },
+  transports: ['websocket', 'polling']
 });
 
-// GET /api/avatar/:userId.svg
-app.get('/api/avatar/:userId.svg', (req, res) => {
-  const user = ensureUser(req.params.userId);
-  const initial = req.params.userId[0];
-  res.setHeader('Content-Type', 'image/svg+xml');
-  res.setHeader('Cache-Control', 'public, max-age=86400');
-  res.send(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-    <stop offset="0%" style="stop-color:${user.avatarColor1}"/>
-    <stop offset="100%" style="stop-color:${user.avatarColor2}"/>
-  </linearGradient></defs>
-  <rect width="100" height="100" rx="24" fill="url(#g)"/>
-  <text x="50" y="68" font-family="-apple-system,SF Pro Display,sans-serif" font-size="44" font-weight="700" fill="white" text-anchor="middle">${initial}</text>
-</svg>`);
-});
-
-// ============ Friends API ============
-
-// POST /api/friends/add
-app.post('/api/friends/add', (req, res) => {
-  const { userId, friendId } = req.body;
-  if (!userId || !friendId || userId === friendId) {
-    return res.json({ ok: false, error: 'Invalid' });
-  }
-  ensureUser(userId);
-  ensureUser(friendId);
-  if (!friends[userId]) friends[userId] = [];
-  if (!friends[friendId]) friends[friendId] = [];
-  if (!friends[userId].includes(friendId)) {
-    friends[userId].push(friendId);
-    friends[friendId].push(userId);
-    // 상호 친구: emit friend lists
-    io.emit('friends_updated', { userId: friendId, friends: getFriendList(friendId) });
-  }
-  io.emit('friends_updated', { userId, friends: getFriendList(userId) });
-  res.json({ ok: true, friends: getFriendList(userId) });
-});
-
-// DELETE /api/friends/remove
-app.delete('/api/friends/remove', (req, res) => {
-  const { userId, friendId } = req.body;
-  if (!userId || !friendId) return res.json({ ok: false, error: 'Invalid' });
-  friends[userId] = (friends[userId] || []).filter(f => f !== friendId);
-  friends[friendId] = (friends[friendId] || []).filter(f => f !== userId);
-  io.emit('friends_updated', { userId, friends: getFriendList(userId) });
-  io.emit('friends_updated', { userId: friendId, friends: getFriendList(friendId) });
-  res.json({ ok: true, friends: getFriendList(userId) });
-});
-
-// GET /api/friends?userId=
-app.get('/api/friends', (req, res) => {
-  const { userId } = req.query;
-  if (!userId) return res.json({ ok: false, error: 'userId required' });
-  res.json({ ok: true, friends: getFriendList(userId) });
-});
-
-// ============ In-Memory Data Store ============
-
+// ─── 데이터 저장소 ───
 const rooms = {};
+const friends = {}; // { nickname: { display_name, avatar, status, friends: Set } }
+const messages = {}; // { room_id: [{ sender, text, time, avatar, type }] }
 
-function getDMroomId(user1, user2) {
-  const sorted = [user1, user2].sort();
-  return `dm_${sorted[0].replace(/\s/g, '_')}_${sorted[1].replace(/\s/g, '_')}`;
+// ─── 친구 관리 ───
+function ensureFriend(nick, displayName, avatar) {
+  if (!friends[nick]) {
+    friends[nick] = {
+      display_name: displayName || nick,
+      avatar: avatar || '😶',
+      status: 'offline',
+      friends: new Set()
+    };
+  }
+  return friends[nick];
 }
 
-function addMessage(roomId, userId, text, msgType = 'user') {
-  if (!rooms[roomId]) return null;
-  const msg = { userId, text, timestamp: new Date().toISOString(), type: msgType };
-  rooms[roomId].messages.push(msg);
-  if (rooms[roomId].messages.length > 500) rooms[roomId].messages = rooms[roomId].messages.slice(-500);
-  return msg;
+function addFriendPair(nick1, nick2) {
+  const f1 = ensureFriend(nick1);
+  const f2 = ensureFriend(nick2);
+  f1.friends.add(nick2);
+  f2.friends.add(nick1);
+  io.emit('friend_update', { nick1, nick2 });
 }
 
-// ============ Routes ============
+// ─── 방 관리 ───
+function createRoomId() {
+  return 'room_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+}
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-app.get('/rooms', (req, res) => res.sendFile(path.join(__dirname, 'public', 'rooms.html')));
-app.get('/chat/:roomId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'chat.html')));
+function createDM(user1, user2) {
+  // 중복 방지
+  for (const [id, r] of Object.entries(rooms)) {
+    if (r.type === 'dm' && Array.isArray(r.participants) && r.participants.length === 2) {
+      const sorted = [...r.participants].sort();
+      if (sorted[0] === [user1, user2].sort()[0] && sorted[1] === [user1, user2].sort()[1]) {
+        return { room_id: id, exists: true };
+      }
+    }
+  }
+  const id = 'dm_' + [user1, user2].sort().join('_');
+  rooms[id] = {
+    id,
+    type: 'dm',
+    participants: [user1, user2],
+    name: null,
+    created: new Date().toISOString()
+  };
+  messages[id] = [];
+  addFriendPair(user1, user2);
+  io.emit('room_update', {});
+  return { room_id: id, exists: false };
+}
 
-// ============ REST API ============
+function createGroup(participants, name) {
+  const id = createRoomId();
+  rooms[id] = {
+    id,
+    type: 'group',
+    participants: [...new Set(participants)],
+    name: name || null,
+    created: new Date().toISOString()
+  };
+  messages[id] = [];
+  // 모든 참가자 간 친구 추가
+  const unique = [...new Set(participants)];
+  for (let i = 0; i < unique.length; i++) {
+    for (let j = i + 1; j < unique.length; j++) {
+      addFriendPair(unique[i], unique[j]);
+    }
+  }
+  io.emit('room_update', {});
+  return { room_id: id };
+}
 
+// ─── REST API ───
+
+// 채팅방 목록 (닉네임 기반 필터링)
 app.get('/api/rooms', (req, res) => {
-  const { userId } = req.query;
-  if (!userId) return res.json({ ok: false, error: 'userId required' });
-  const userRooms = buildRoomList(userId);
-  res.json({ ok: true, rooms: userRooms });
+  const nick = req.query.nick;
+  let result;
+  if (nick) {
+    result = Object.values(rooms).filter(r =>
+      Array.isArray(r.participants) && r.participants.includes(nick)
+    );
+  } else {
+    result = Object.values(rooms);
+  }
+  res.json({ rooms: result });
 });
 
+// DM 생성
 app.post('/api/rooms/dm', (req, res) => {
-  const { userId, targetUserId } = req.body;
-  if (!userId || !targetUserId || userId === targetUserId) return res.json({ ok: false, error: 'Invalid' });
-  const roomId = getDMroomId(userId, targetUserId);
-  if (!rooms[roomId]) {
-    rooms[roomId] = { type: 'dm', name: `${userId} ↔ ${targetUserId}`, participants: [userId, targetUserId], messages: [] };
-    addMessage(roomId, 'system', `${userId}님과 ${targetUserId}님의 대화가 시작되었습니다.`, 'system');
-    // DM 생성 시 자동 친구 추가
-    ensureUser(userId); ensureUser(targetUserId);
-    if (!friends[userId]) friends[userId] = [];
-    if (!friends[targetUserId]) friends[targetUserId] = [];
-    if (!friends[userId].includes(targetUserId)) {
-      friends[userId].push(targetUserId);
-      friends[targetUserId].push(userId);
-    }
+  const { user1, user2 } = req.body;
+  if (!user1 || !user2) {
+    return res.status(400).json({ error: 'user1 and user2 required' });
   }
-  notifyRoomList([userId, targetUserId]);
-  notifyFriends([userId, targetUserId]);
-  res.json({ ok: true, roomId });
+  const result = createDM(user1, user2);
+  res.json(result);
 });
 
+// DM 찾아서 입장 (없으면 404)
+app.post('/api/rooms/dm/join', (req, res) => {
+  const { user1, user2 } = req.body;
+  if (!user1 || !user2) {
+    return res.status(400).json({ error: 'user1 and user2 required' });
+  }
+  const sorted = [user1, user2].sort();
+  for (const [id, r] of Object.entries(rooms)) {
+    if (r.type === 'dm' && Array.isArray(r.participants) && r.participants.length === 2) {
+      const psorted = [...r.participants].sort();
+      if (psorted[0] === sorted[0] && psorted[1] === sorted[1]) {
+        return res.json({ room_id: id });
+      }
+    }
+  }
+  res.status(404).json({ error: 'DM not found' });
+});
+
+// 그룹 생성
 app.post('/api/rooms/group', (req, res) => {
-  const { roomName, participants } = req.body;
-  if (!roomName || !participants || participants.length < 2) return res.json({ ok: false, error: 'Invalid' });
-  const roomId = `group_${roomName.replace(/\s/g, '_')}`;
-  if (rooms[roomId]) return res.json({ ok: false, error: 'Room exists' });
-  rooms[roomId] = { type: 'group', name: roomName, participants: [...participants], messages: [] };
-  addMessage(roomId, 'system', `"${roomName}" 그룹이 생성되었습니다.`, 'system');
-  // 그룹 생성 시 모든 참가자끼리 친구 추가
-  participants.forEach(p => ensureUser(p));
-  for (let i = 0; i < participants.length; i++) {
-    for (let j = i + 1; j < participants.length; j++) {
-      const a = participants[i], b = participants[j];
-      if (!friends[a]) friends[a] = [];
-      if (!friends[b]) friends[b] = [];
-      if (!friends[a].includes(b)) { friends[a].push(b); friends[b].push(a); }
-    }
+  const { participants, name } = req.body;
+  if (!participants || participants.length < 2) {
+    return res.status(400).json({ error: 'need at least 2 participants' });
   }
-  notifyRoomList(participants);
-  notifyFriends(participants);
-  res.json({ ok: true, roomId });
+  const result = createGroup(participants, name);
+  res.json(result);
 });
 
-app.post('/api/rooms/leave', (req, res) => {
-  const { roomId, userId } = req.body;
-  if (!roomId || !userId || !rooms[roomId]) return res.json({ ok: false, error: 'Invalid' });
-  const room = rooms[roomId];
-  room.participants = room.participants.filter(p => p !== userId);
-  addMessage(roomId, 'system', `${userId}님이 나갔습니다.`, 'system');
-  io.to(roomId).emit('chat_message', { userId: 'system', text: `${userId}님이 나갔습니다.`, timestamp: new Date().toISOString(), type: 'system' });
-  if (room.participants.length === 0) {
-    delete rooms[roomId];
+// 채팅방 나가기
+app.post('/api/rooms/:id/leave', (req, res) => {
+  const { id } = req.params;
+  const { nickname } = req.body;
+  if (!rooms[id]) return res.status(404).json({ error: 'room not found' });
+  if (!nickname) return res.status(400).json({ error: 'nickname required' });
+
+  const room = rooms[id];
+  if (Array.isArray(room.participants)) {
+    room.participants = room.participants.filter(p => p !== nickname);
   }
-  notifyRoomList([...room.participants, userId]);
+
+  // 빈 방이면 삭제
+  if (!room.participants || room.participants.length === 0) {
+    delete rooms[id];
+    delete messages[id];
+    io.emit('room_deleted', { room_id: id });
+  }
+
+  io.to(id).emit('message', {
+    type: 'system',
+    text: `${nickname}님이 나갔습니다.`,
+    time: new Date().toISOString()
+  });
+  io.emit('room_update', {});
+
   res.json({ ok: true });
 });
 
-// ============ Socket.IO ============
-
-let roomListTimers = {};
-let friendListTimers = {};
-
-function notifyRoomList(userIds) {
-  userIds.forEach(uid => {
-    clearTimeout(roomListTimers[uid]);
-    roomListTimers[uid] = setTimeout(() => {
-      io.emit('rooms_updated', { userId: uid, rooms: buildRoomList(uid) });
-    }, 200);
-  });
-}
-
-function notifyFriends(userIds) {
-  userIds.forEach(uid => {
-    clearTimeout(friendListTimers[uid]);
-    friendListTimers[uid] = setTimeout(() => {
-      io.emit('friends_updated', { userId: uid, friends: getFriendList(uid) });
-    }, 200);
-  });
-}
-
-function buildRoomList(userId) {
-  const list = [];
-  for (const [roomId, room] of Object.entries(rooms)) {
-    if (room.participants.includes(userId)) {
-      const lastMsg = room.messages.length > 0 ? room.messages[room.messages.length - 1] : null;
-      list.push({
-        roomId, type: room.type, name: room.name,
-        participants: room.participants.map(p => {
-          const up = ensureUser(p);
-          return { userId: p, avatarUrl: `/api/avatar/${encodeURIComponent(p)}.svg`, emoji: up.avatarEmoji };
-        }),
-        lastMessage: lastMsg ? lastMsg.text.slice(0, 50) : null,
-        lastTime: lastMsg ? lastMsg.timestamp : null, unread: 0
-      });
+// 전체 친구 목록
+app.get('/api/friends/all', (req, res) => {
+  const allFriends = new Set();
+  for (const [nick, data] of Object.entries(friends)) {
+    if (data.friends) {
+      data.friends.forEach(f => allFriends.add(f));
     }
   }
-  list.sort((a, b) => (b.lastTime || '').localeCompare(a.lastTime || ''));
-  return list;
-}
+  res.json({ friends: [...allFriends] });
+});
 
+// 특정 친구 정보
+app.get('/api/friends/:nick', (req, res) => {
+  const { nick } = req.params;
+  const f = friends[nick];
+  if (f) {
+    res.json({
+      display_name: f.display_name,
+      avatar: f.avatar,
+      status: f.status
+    });
+  } else {
+    res.json({});
+  }
+});
+
+// ─── Socket.IO ───
 io.on('connection', (socket) => {
-  console.log(`[connect] ${socket.id}`);
+  const nick = socket.handshake.query.nick || '익명';
+  const avatar = socket.handshake.query.avatar || '😶';
 
-  socket.on('join_room', ({ roomId, userId }) => {
-    if (!roomId || !userId || !rooms[roomId]) return;
-    if (!rooms[roomId].participants.includes(userId)) {
-      rooms[roomId].participants.push(userId);
-    }
-    socket.join(roomId);
-    socket.data.roomId = roomId;
-    socket.data.userId = userId;
-    console.log(`[join] ${userId} → ${roomId}`);
-    socket.emit('message_history', rooms[roomId].messages.slice(-100));
-    const joinMsg = addMessage(roomId, 'system', `${userId}님이 입장했습니다.`, 'system');
-    socket.to(roomId).emit('chat_message', joinMsg);
-    notifyRoomList([userId]);
-  });
+  ensureFriend(nick, nick, avatar);
+  friends[nick].status = 'online';
 
-  socket.on('send_message', ({ roomId, userId, text }) => {
-    if (!roomId || !userId || !text || !rooms[roomId]) return;
-    const msg = addMessage(roomId, userId, text, 'user');
-    console.log(`[msg] ${userId} @ ${roomId}: ${text.slice(0, 30)}`);
-    io.to(roomId).emit('chat_message', msg);
-    notifyRoomList(rooms[roomId].participants);
-  });
+  socket.on('join_room', (data) => {
+    const roomId = data.room_id;
+    const participant = data.nickname || nick;
+    const av = data.avatar || avatar;
 
-  socket.on('leave_room', ({ roomId, userId }) => {
-    if (!roomId || !userId || !rooms[roomId]) return;
-    const room = rooms[roomId];
-    room.participants = room.participants.filter(p => p !== userId);
-    socket.leave(roomId);
-    addMessage(roomId, 'system', `${userId}님이 나갔습니다.`, 'system');
-    io.to(roomId).emit('chat_message', { userId: 'system', text: `${userId}님이 나갔습니다.`, timestamp: new Date().toISOString(), type: 'system' });
-    console.log(`[leave] ${userId} X ${roomId}`);
-    if (room.participants.length === 0) delete rooms[roomId];
-    notifyRoomList([...room.participants, userId]);
-  });
-
-  socket.on('create_dm', ({ userId, targetUserId }) => {
-    if (!userId || !targetUserId || userId === targetUserId) return;
-    const roomId = getDMroomId(userId, targetUserId);
     if (!rooms[roomId]) {
-      rooms[roomId] = { type: 'dm', name: `${userId} ↔ ${targetUserId}`, participants: [userId, targetUserId], messages: [] };
-      addMessage(roomId, 'system', `${userId}님과 ${targetUserId}님의 대화가 시작되었습니다.`, 'system');
+      socket.emit('error', { message: 'Room not found: ' + roomId });
+      return;
     }
-    socket.emit('dm_created', { roomId, targetUserId });
-    notifyRoomList([userId, targetUserId]);
-  });
 
-  socket.on('create_group', ({ roomName, participants }) => {
-    if (!roomName || !participants || participants.length < 2) return;
-    const roomId = `group_${roomName.replace(/\s/g, '_')}`;
-    if (rooms[roomId]) return;
-    rooms[roomId] = { type: 'group', name: roomName, participants: [...participants], messages: [] };
-    addMessage(roomId, 'system', `"${roomName}" 그룹이 생성되었습니다.`, 'system');
-    socket.emit('group_created', { roomId, roomName });
-    notifyRoomList(participants);
-  });
-
-  socket.on('get_rooms', ({ userId }) => {
-    socket.emit('rooms_updated', { userId, rooms: buildRoomList(userId) });
-  });
-
-  socket.on('get_friends', ({ userId }) => {
-    socket.emit('friends_updated', { userId, friends: getFriendList(userId) });
-  });
-
-  socket.on('add_friend', ({ userId, friendId }) => {
-    if (!userId || !friendId || userId === friendId) return;
-    ensureUser(userId); ensureUser(friendId);
-    if (!friends[userId]) friends[userId] = [];
-    if (!friends[friendId]) friends[friendId] = [];
-    if (!friends[userId].includes(friendId)) {
-      friends[userId].push(friendId);
-      friends[friendId].push(userId);
+    // 참가자 추가
+    if (rooms[roomId].participants && !rooms[roomId].participants.includes(participant)) {
+      rooms[roomId].participants.push(participant);
     }
-    notifyFriends([userId, friendId]);
+
+    socket.join(roomId);
+    socket.currentRoom = roomId;
+    socket.nickname = participant;
+
+    // 과거 메시지 전송
+    if (messages[roomId] && messages[roomId].length > 0) {
+      const recent = messages[roomId].slice(-100);
+      recent.forEach(msg => socket.emit('message', msg));
+    }
+
+    // 입장 알림
+    io.to(roomId).emit('message', {
+      type: 'system',
+      text: `${participant}님이 입장했습니다.`,
+      time: new Date().toISOString()
+    });
+
+    io.emit('room_update', {});
   });
 
-  socket.on('remove_friend', ({ userId, friendId }) => {
-    if (!userId || !friendId) return;
-    friends[userId] = (friends[userId] || []).filter(f => f !== friendId);
-    friends[friendId] = (friends[friendId] || []).filter(f => f !== userId);
-    notifyFriends([userId, friendId]);
+  socket.on('send_message', (data) => {
+    const roomId = data.room_id;
+    const msg = {
+      sender: data.sender || nick,
+      text: data.text || data.message || '',
+      avatar: data.avatar || avatar,
+      time: new Date().toISOString(),
+      type: 'message'
+    };
+
+    if (!rooms[roomId]) return;
+    if (!messages[roomId]) messages[roomId] = [];
+
+    // 마지막 메시지 저장
+    rooms[roomId].last_message = msg.text;
+    rooms[roomId].last_time = msg.time;
+    messages[roomId].push(msg);
+
+    // 100개 초과 시 오래된 것 삭제
+    if (messages[roomId].length > 200) {
+      messages[roomId] = messages[roomId].slice(-100);
+    }
+
+    io.to(roomId).emit('message', msg);
+  });
+
+  socket.on('leave_room', (data) => {
+    const roomId = data.room_id;
+    const participant = data.nickname || nick;
+
+    if (rooms[roomId]) {
+      rooms[roomId].participants = rooms[roomId].participants.filter(p => p !== participant);
+
+      io.to(roomId).emit('message', {
+        type: 'system',
+        text: `${participant}님이 나갔습니다.`,
+        time: new Date().toISOString()
+      });
+
+      if (rooms[roomId].participants.length === 0) {
+        delete rooms[roomId];
+        delete messages[roomId];
+        io.emit('room_deleted', { room_id: roomId });
+      }
+    }
+
+    socket.leave(roomId);
+    io.emit('room_update', {});
   });
 
   socket.on('disconnect', () => {
-    console.log(`[disconnect] ${socket.id}`);
+    if (friends[nick]) {
+      friends[nick].status = 'offline';
+    }
+    io.emit('friend_update', { nick, status: 'offline' });
   });
 });
 
-// ============ Start ============
-
+const PORT = process.env.PORT || 3456;
 server.listen(PORT, () => {
-  console.log(`🚀 Kakao-style Chat Server on :${PORT}`);
+  console.log(`ChaTalk server running on port ${PORT}`);
+
+  // 빌트인 참가자 등록
+  ensureFriend('대가리', '대가리', '🧠');
+  ensureFriend('미코', '미코', '🎨');
+  ensureFriend('찬희', '찬희', '✨');
+
+  // 서로 친구 맺기
+  addFriendPair('대가리', '찬희');
+  addFriendPair('미코', '찬희');
+  addFriendPair('대가리', '미코');
+
+  // 기본 그룹방 생성
+  if (!Object.values(rooms).some(r => r.name === '전체 채팅방')) {
+    createGroup(['대가리', '찬희', '미코'], '전체 채팅방');
+    console.log('Default group created');
+  }
 });
