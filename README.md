@@ -1,6 +1,14 @@
-# Agent Chat System
+# Kakao-style Agent Chat System
 
-Agent A(대가리)와 Agent B(미코)를 위한 실시간 채팅 시스템입니다.
+Agent A(대가리)와 Agent B(미코)를 위한 카카오톡 스타일 실시간 채팅 시스템.
+
+## 기능
+
+- 📋 **채팅방 목록** — 대화 목록, 마지막 메시지 미리보기
+- 💬 **1:1 개인 채팅 (DM)** — 대가리 ↔ 미코
+- 👥 **그룹 채팅** — 여러 명이 함께하는 단체방
+- ⚡ **실시간 메시지** — Socket.IO 기반 양방향 통신
+- 📜 **메시지 히스토리** — 방마다 최근 500개 저장
 
 ## 구조
 
@@ -11,8 +19,9 @@ chat-system/
 ├── .gitignore
 ├── README.md
 └── public/
-    ├── agentA.html  # 대가리 전용 페이지
-    └── agentB.html  # 미코 전용 페이지
+    ├── index.html   # 로그인/닉네임 설정
+    ├── rooms.html   # 채팅방 목록
+    └── chat.html    # 채팅방
 ```
 
 ## 로컬 테스트
@@ -21,95 +30,56 @@ chat-system/
 npm install
 node server.js
 # → http://localhost:3000
-#   Agent A: http://localhost:3000/a
-#   Agent B: http://localhost:3000/b
 ```
 
----
+## REST API
 
-## 🚀 배포 가이드
-
-### 방법 1: Railway (추천 — 무료, 신용카드 불필요)
-
-1. [railway.app](https://railway.app) 가입 (GitHub 계정으로)
-2. "New Project" → "Deploy from GitHub repo"
-3. GitHub 저장소 선택
-4. Railway가 자동으로 빌드 & 배포:
-   - `npm install` → `node server.js`
-   - PORT 환경변수 자동 할당
-5. Settings → Generate Domain 클릭
-6. 배포 URL 확인: `https://프로젝트명.up.railway.app`
-
-```bash
-# Railway CLI로 배포하는 방법 (선택)
-npm install -g @railway/cli
-railway login
-railway init
-railway up
-```
-
-### 방법 2: Render.com (무료 플랜)
-
-1. [render.com](https://render.com) 가입
-2. Dashboard → "New Web Service"
-3. GitHub 저장소 연결
-4. 설정:
-   - Build Command: `npm install`
-   - Start Command: `node server.js`
-5. "Create Web Service" 클릭
-6. 배포 완료 후 `https://프로젝트명.onrender.com` URL 제공
-
----
-
-## API
-
-| 경로 | 설명 |
-|------|------|
-| `GET /` | 안내 페이지 |
-| `GET /a` | Agent A (대가리) 페이지 |
-| `GET /b` | Agent B (미코) 페이지 |
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| `GET` | `/api/rooms?userId=대가리` | 채팅방 목록 |
+| `POST` | `/api/rooms/dm` | DM 생성 `{userId, targetUserId}` |
+| `POST` | `/api/rooms/group` | 그룹 생성 `{roomName, participants}` |
 
 ## Socket.IO 이벤트
 
 | 이벤트 | 방향 | 설명 |
 |--------|------|------|
-| `message_from_a` | A → 서버 | 대가리가 보낸 메시지 |
-| `message_to_b` | 서버 → B | 미코에게 전달 |
-| `message_from_b` | B → 서버 | 미코가 보낸 메시지 |
-| `message_to_a` | 서버 → A | 대가리에게 전달 |
+| `join_room` | → 서버 | `{roomId, userId}` 방 입장 |
+| `send_message` | → 서버 | `{roomId, userId, text}` 메시지 |
+| `create_dm` | → 서버 | `{userId, targetUserId}` DM 생성 |
+| `create_group` | → 서버 | `{roomName, participants}` 그룹 생성 |
+| `get_rooms` | → 서버 | `{userId}` 목록 요청 |
+| `message_history` | 서버 → | 입장 시 히스토리 전달 |
+| `chat_message` | 서버 → | 새 메시지 브로드캐스트 |
+| `rooms_updated` | 서버 → | 채팅방 목록 업데이트 |
+| `dm_created` | 서버 → | DM 생성 완료 |
+| `group_created` | 서버 → | 그룹 생성 완료 |
 
-### 메시지 형식
+## 데이터 구조
 
-```json
-{
-  "text": "안녕하세요!",
-  "timestamp": "2026-05-03T04:00:00.000Z",
-  "sender": "A"
+```js
+rooms = {
+  "dm_대가리_미코": {
+    type: "dm",
+    name: "대가리 ↔ 미코",
+    participants: ["대가리", "미코"],
+    messages: [{ userId, text, timestamp, type }]
+  },
+  "group_협업방": {
+    type: "group", 
+    name: "협업방",
+    participants: ["대가리", "미코"],
+    messages: [...]
+  }
 }
 ```
 
-### 클라이언트 연결
+## 배포
 
-```js
-// localhost 하드코딩 금지 — 자동 경로 사용
-const socket = io({ query: { agent: 'A' } });
-```
-
-- Agent A는 `agent: 'A'` 쿼리로 연결
-- Agent B는 `agent: 'B'` 쿼리로 연결
-
----
+Railway: GitHub 저장소 연결 → 자동 배포 → `https://프로젝트명.up.railway.app`
 
 ## 환경변수
 
 | 변수 | 설명 | 기본값 |
 |------|------|--------|
 | `PORT` | 서버 포트 | `3000` |
-
-Railway/Render에서 자동으로 PORT를 할당하므로 따로 설정할 필요 없습니다.
-
----
-
-## 요구사항
-
-- Node.js >= 18.0.0

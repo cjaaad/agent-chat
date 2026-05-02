@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>채팅방</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    :root {
+      --chat-bg: #B2C7D9;
+      --header-bg: #A8C0D6;
+      --my-bubble: #FEE500;
+      --my-text: #191919;
+      --other-bubble: #FFFFFF;
+      --other-text: #191919;
+      --system-text: #6B7B8D;
+      --time-color: #8B8B8B;
+      --input-bg: #FFFFFF;
+      --input-text: #191919;
+      --border: rgba(0,0,0,0.08);
+      --date-bg: rgba(0,0,0,0.08);
+      --date-text: #5B6778;
+      --shadow: 0 1px 2px rgba(0,0,0,0.08);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --chat-bg: #1A1D21;
+        --header-bg: #222529;
+        --my-bubble: #FEE500;
+        --my-text: #191919;
+        --other-bubble: #2C2F33;
+        --other-text: #E4E4E4;
+        --system-text: #8B949E;
+        --time-color: #6B7280;
+        --input-bg: #2C2F33;
+        --input-text: #E4E4E4;
+        --border: rgba(255,255,255,0.06);
+        --date-bg: rgba(255,255,255,0.06);
+        --date-text: #8B949E;
+        --shadow: 0 1px 2px rgba(0,0,0,0.3);
+      }
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: var(--chat-bg);
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .wrap {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .chat-header {
+      background: var(--header-bg);
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .back-btn {
+      width: 32px; height: 32px;
+      border: none; background: transparent;
+      font-size: 20px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--other-text);
+      flex-shrink: 0;
+    }
+    .header-info { flex: 1; min-width: 0; }
+    .room-title {
+      font-size: 16px; font-weight: 600;
+      color: var(--other-text);
+    }
+    .room-sub {
+      font-size: 12px; color: var(--system-text);
+    }
+    .menu-btn {
+      width: 32px; height: 32px;
+      border: none; background: transparent;
+      font-size: 18px; cursor: pointer;
+      color: var(--other-text);
+      flex-shrink: 0;
+    }
+
+    /* Messages */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      -webkit-overflow-scrolling: touch;
+    }
+    .messages::-webkit-scrollbar { width: 0; }
+
+    /* Date divider */
+    .date-divider {
+      text-align: center;
+      margin: 12px 0;
+    }
+    .date-divider span {
+      font-size: 12px;
+      color: var(--date-text);
+      background: var(--date-bg);
+      padding: 5px 14px;
+      border-radius: 12px;
+    }
+
+    /* System message */
+    .system-msg {
+      text-align: center;
+      margin: 6px 0;
+    }
+    .system-msg span {
+      font-size: 12px;
+      color: var(--system-text);
+    }
+
+    /* Message row */
+    .msg-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 4px;
+      animation: msgIn 0.2s ease-out;
+    }
+    @keyframes msgIn { from { opacity: 0; transform: translateY(6px); } }
+    .msg-row.me { justify-content: flex-end; }
+    .msg-row .profile {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      margin-top: 14px;
+    }
+    .msg-row .profile.dm-bg { background: linear-gradient(135deg, #FEE500, #F5A623); }
+    .msg-row .content { max-width: 70%; }
+    .msg-row .sender-name {
+      font-size: 12px; color: var(--system-text);
+      margin-bottom: 3px; padding-left: 2px;
+    }
+    .msg-row .bubble-wrap {
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .msg-row .bubble {
+      padding: 8px 13px;
+      border-radius: 16px;
+      font-size: 15px;
+      line-height: 1.45;
+      word-break: break-word;
+      white-space: pre-wrap;
+      box-shadow: var(--shadow);
+      position: relative;
+    }
+    .msg-row.me .bubble {
+      background: var(--my-bubble);
+      color: var(--my-text);
+      border-top-right-radius: 4px;
+    }
+    .msg-row.other .bubble {
+      background: var(--other-bubble);
+      color: var(--other-text);
+      border-top-left-radius: 4px;
+    }
+    .msg-row .msg-time {
+      font-size: 10px;
+      color: var(--time-color);
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .msg-row.me .bubble-wrap { flex-direction: row-reverse; }
+
+    /* Continuous messages (group — hide profile/name) */
+    .msg-row.continuous { margin-top: -12px; }
+    .msg-row.continuous .profile,
+    .msg-row.continuous .sender-name { visibility: hidden; }
+
+    /* Input */
+    .input-area {
+      display: flex;
+      gap: 8px;
+      padding: 8px 12px;
+      padding-bottom: calc(8px + var(--safe-bottom));
+      background: var(--header-bg);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      align-items: flex-end;
+    }
+    .input-area textarea {
+      flex: 1;
+      padding: 10px 14px;
+      border: none;
+      border-radius: 20px;
+      font-size: 15px;
+      background: var(--input-bg);
+      color: var(--input-text);
+      outline: none;
+      resize: none;
+      max-height: 100px;
+      min-height: 40px;
+      line-height: 1.4;
+      font-family: inherit;
+    }
+    .input-area textarea:disabled { opacity: 0.5; }
+    .send-btn {
+      width: 40px; height: 40px;
+      border: none;
+      border-radius: 50%;
+      background: #FEE500;
+      color: #191919;
+      font-size: 16px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform 0.1s;
+    }
+    .send-btn:active { transform: scale(0.92); }
+    .send-btn:disabled { opacity: 0.4; cursor: default; }
+
+    /* Loading */
+    .loading {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--system-text);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <!-- Header -->
+  <div class="chat-header">
+    <button class="back-btn" id="backBtn">←</button>
+    <div class="header-info">
+      <div class="room-title" id="roomTitle">채팅방</div>
+      <div class="room-sub" id="roomSub"></div>
+    </div>
+    <button class="menu-btn" id="menuBtn">≡</button>
+  </div>
+
+  <!-- Messages -->
+  <div class="messages" id="messages">
+    <div class="loading">채팅방 입장 중...</div>
+  </div>
+
+  <!-- Input -->
+  <div class="input-area">
+    <textarea id="msgInput" placeholder="메시지를 입력하세요..." rows="1" disabled autocomplete="off"></textarea>
+    <button class="send-btn" id="sendBtn" disabled>↑</button>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const STORAGE_KEY = 'agent_chat_userId';
+    const socket = io();
+
+    // Parse URL
+    const pathParts = window.location.pathname.split('/');
+    const roomId = decodeURIComponent(pathParts[pathParts.length - 1]);
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get('user') || localStorage.getItem(STORAGE_KEY);
+
+    if (!userId) { window.location.href = '/'; return; }
+    if (!roomId) { window.location.href = `/rooms?user=${encodeURIComponent(userId)}`; return; }
+
+    localStorage.setItem(STORAGE_KEY, userId);
+
+    const messagesEl = document.getElementById('messages');
+    const msgInput = document.getElementById('msgInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const roomTitle = document.getElementById('roomTitle');
+    const roomSub = document.getElementById('roomSub');
+    const backBtn = document.getElementById('backBtn');
+
+    let isGroup = roomId.startsWith('group_');
+    let lastSender = '';
+    let lastDate = '';
+    let connected = false;
+    let isAtBottom = true;
+
+    // ── Helpers ──
+    function formatTime(iso) {
+      const d = new Date(iso);
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+
+    function formatDate(iso) {
+      const d = new Date(iso);
+      const days = ['일', '월', '화', '수', '목', '금', '토'];
+      return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${days[d.getDay()]}요일`;
+    }
+
+    function isSameDay(iso1, iso2) {
+      return new Date(iso1).toDateString() === new Date(iso2).toDateString();
+    }
+
+    function avatarEmoji(name) {
+      const map = { '대가리': '🐶', '미코': '🐰' };
+      return map[name] || '😊';
+    }
+
+    function scrollBottom(force) {
+      if (force || isAtBottom) {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+    }
+
+    function addDateDivider(iso) {
+      if (isSameDay(iso, lastDate)) return;
+      lastDate = iso;
+      const div = document.createElement('div');
+      div.className = 'date-divider';
+      div.innerHTML = `<span>${formatDate(iso)}</span>`;
+      messagesEl.appendChild(div);
+    }
+
+    function addSystemMsg(text) {
+      const div = document.createElement('div');
+      div.className = 'system-msg';
+      div.innerHTML = `<span>${text}</span>`;
+      messagesEl.appendChild(div);
+      scrollBottom(true);
+    }
+
+    function addMessage({ userId: sender, text, timestamp, type }) {
+      if (type === 'system') {
+        addSystemMsg(text);
+        return;
+      }
+
+      const isMe = sender === userId;
+      addDateDivider(timestamp);
+      
+      // Continuous check (group only, same sender, within 1 min)
+      const msgTime = new Date(timestamp).getTime();
+      const lastTime = lastSender === sender ? msgTime : 0;
+      const isContinuous = isGroup && !isMe && sender === lastSender && (msgTime - lastTime) < 60000;
+      
+      if (!isMe) lastSender = sender;
+
+      const row = document.createElement('div');
+      row.className = `msg-row ${isMe ? 'me' : 'other'}${isContinuous ? ' continuous' : ''}`;
+
+      let html = '';
+
+      if (!isMe) {
+        // Profile
+        const emoji = avatarEmoji(sender);
+        html += `<div class="profile dm-bg">${emoji}</div>`;
+        
+        html += '<div class="content">';
+        // Name (group only)
+        if (isGroup && !isContinuous) {
+          html += `<div class="sender-name">${sender}</div>`;
+        }
+        // Bubble + time
+        html += `<div class="bubble-wrap">`;
+        html += `<div class="bubble">${escapeHtml(text)}</div>`;
+        html += `<div class="msg-time">${formatTime(timestamp)}</div>`;
+        html += `</div></div>`;
+      } else {
+        // My message
+        html += '<div class="content">';
+        html += '<div class="bubble-wrap">';
+        html += `<div class="msg-time">${formatTime(timestamp)}</div>`;
+        html += `<div class="bubble">${escapeHtml(text)}</div>`;
+        html += '</div></div>';
+      }
+
+      row.innerHTML = html;
+      messagesEl.appendChild(row);
+      scrollBottom(true);
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ── Header setup ──
+    if (isGroup) {
+      const name = roomId.replace('group_', '');
+      roomTitle.textContent = name;
+      roomSub.textContent = '';
+    } else {
+      const parts = roomId.replace('dm_', '').split('_');
+      const other = parts.find(p => p !== userId) || 'Unknown';
+      roomTitle.textContent = other;
+      roomSub.textContent = '1:1 채팅';
+    }
+
+    backBtn.addEventListener('click', () => {
+      window.location.href = `/rooms?user=${encodeURIComponent(userId)}`;
+    });
+
+    // ── Input ──
+    function updateSendBtn() {
+      sendBtn.disabled = !connected || msgInput.value.trim() === '';
+    }
+
+    function autoResize() {
+      msgInput.style.height = 'auto';
+      msgInput.style.height = Math.min(msgInput.scrollHeight, 100) + 'px';
+    }
+
+    function sendMessage() {
+      const text = msgInput.value.trim();
+      if (!text || !connected) return;
+      socket.emit('send_message', { roomId, userId, text });
+      msgInput.value = '';
+      msgInput.style.height = 'auto';
+      updateSendBtn();
+      msgInput.focus();
+    }
+
+    msgInput.addEventListener('input', () => { updateSendBtn(); autoResize(); });
+    msgInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+    sendBtn.addEventListener('click', sendMessage);
+
+    // Track scroll
+    messagesEl.addEventListener('scroll', () => {
+      const diff = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+      isAtBottom = diff < 60;
+    });
+
+    // ── Socket.IO ──
+    socket.on('connect', () => {
+      connected = true;
+      msgInput.disabled = false;
+      updateSendBtn();
+      socket.emit('join_room', { roomId, userId });
+    });
+
+    socket.on('disconnect', () => {
+      connected = false;
+      msgInput.disabled = true;
+      sendBtn.disabled = true;
+      addSystemMsg('⚠️ 연결이 끊어졌습니다. 재연결 중...');
+    });
+
+    socket.on('message_history', (messages) => {
+      messagesEl.innerHTML = '';
+      lastSender = '';
+      lastDate = '';
+      if (messages.length === 0) {
+        addSystemMsg('대화를 시작해보세요! 👋');
+      } else {
+        messages.forEach(m => addMessage(m));
+      }
+    });
+
+    socket.on('chat_message', (data) => {
+      addMessage(data);
+    });
+
+    // Room info update (participant count etc)
+    socket.on('room_info', (info) => {
+      if (isGroup) {
+        roomSub.textContent = `참가자 ${info.participants?.length || 0}명`;
+      }
+    });
+
+    // ── Init ──
+    updateSendBtn();
+  })();
+</script>
+</body>
+</html>
